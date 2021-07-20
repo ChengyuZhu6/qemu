@@ -28,6 +28,7 @@
 #include "sysemu/hw_accel.h"
 #include "sysemu/kvm_int.h"
 #include "sysemu/runstate.h"
+#include "sysemu/tdx.h"
 #include "kvm_i386.h"
 #include "sev.h"
 #include "sysemu/tdx.h"
@@ -4686,6 +4687,18 @@ int kvm_arch_put_registers(CPUState *cpu, int level)
 
     /* TODO: Allow accessing guest state for debug TDs. */
     if (is_tdx_vm()) {
+        CPUX86State *env = &x86_cpu->env;
+
+        /*
+         * Inject exception to TD guest is NOT allowed.
+         * Now KVM has workaround to emulate
+         * #BP injection to support GDB stub feature.
+         */
+        if (tdx_debug_enabled() &&
+            (env->exception_pending == 1) &&
+            (env->exception_nr == 3))
+            return kvm_put_vcpu_events(x86_cpu, level);
+
         return 0;
     }
 
