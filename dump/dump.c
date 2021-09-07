@@ -1337,6 +1337,8 @@ static void write_dump_pages(DumpState *s, Error **errp)
     uint8_t *buf;
     GuestPhysBlock *block_iter = NULL;
     uint64_t pfn_iter;
+    uint8_t *page_buf = NULL;
+    MemoryRegion *mr;
 
     /* get offset of page_desc and page_data in dump file */
     offset_desc = s->offset_page;
@@ -1371,6 +1373,14 @@ static void write_dump_pages(DumpState *s, Error **errp)
         goto out;
     }
 
+    if (s->encrypted_guest) {
+        page_buf = g_malloc0(s->dump_info.page_size);
+        if (!page_buf) {
+            error_setg(errp, "dump: No enough memory");
+            goto out;
+        }
+    }
+
     offset_data += s->dump_info.page_size;
 
     /*
@@ -1378,6 +1388,19 @@ static void write_dump_pages(DumpState *s, Error **errp)
      * first page of page section
      */
     while (get_next_page(&block_iter, &pfn_iter, &buf, s)) {
+        if (s->encrypted_guest) {
+            mr = block_iter->mr;
+            if (memory_region_ram_debug_ops_read_available(mr)) {
+                mr->ram_debug_ops->read(page_buf, buf,
+                                        dump_pfn_to_paddr(s, pfn_iter),
+                                        s->dump_info.page_size,
+                                        MEMTXATTRS_UNSPECIFIED_DEBUG);
+            } else {
+                memset(page_buf, 0, s->dump_info.page_size);
+            }
+            buf = page_buf;
+        }
+
         /* check zero page */
         if (buffer_is_zero(buf, s->dump_info.page_size)) {
             ret = write_cache(&page_desc, &pd_zero, sizeof(PageDescriptor),
@@ -1490,6 +1513,9 @@ out:
 #endif
 
     g_free(buf_out);
+
+    if (page_buf)
+        g_free(page_buf);
 }
 
 static void create_kdump_vmcore(DumpState *s, Error **errp)
