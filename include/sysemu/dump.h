@@ -158,6 +158,7 @@ typedef struct DumpState {
     uint32_t shdr_num;
     bool resume;
     bool detached;
+    bool encrypted_guest;
     ssize_t note_size;
     hwaddr shdr_offset;
     hwaddr phdr_offset;
