@@ -22,12 +22,14 @@
 #include "sysemu/runstate.h"
 #include "sysemu/cpus.h"
 #include "qapi/error.h"
+#include "sysemu/tdx.h"
 #include "qapi/qapi-commands-dump.h"
 #include "qapi/qapi-events-dump.h"
 #include "qapi/qmp/qerror.h"
 #include "qemu/error-report.h"
 #include "qemu/main-loop.h"
 #include "hw/misc/vmcoreinfo.h"
+#include "hw/boards.h"
 #include "migration/blocker.h"
 
 #ifdef TARGET_X86_64
@@ -428,6 +430,41 @@ static void write_memory(DumpState *s, GuestPhysBlock *block, ram_addr_t start,
     }
 }
 
+static void write_memory_encrypted_guest(DumpState *s, GuestPhysBlock *block,
+                                         ram_addr_t start, int64_t size,
+                                         void *page_buf, uint64_t page_buf_size,
+                                         Error **errp)
+{
+    Error *local_err = NULL;
+    hwaddr gpa = block->target_start + start;
+    uint8_t *hva = block->host_addr + start;
+    int64_t round_size;
+    MemoryRegion *mr = block->mr;
+
+    if (!memory_region_ram_debug_ops_read_available(block->mr)) {
+        memset(page_buf, 0, page_buf_size);
+        return;
+    }
+
+    while (size > 0) {
+        round_size = size < page_buf_size ? size : page_buf_size;
+        mr->ram_debug_ops->read(page_buf,
+                                hva, gpa,
+                                round_size,
+                                MEMTXATTRS_UNSPECIFIED_DEBUG);
+
+        write_data(s, page_buf, round_size, &local_err);
+        if (local_err) {
+            error_propagate(errp, local_err);
+            return;
+        }
+
+        size -= round_size;
+        gpa += round_size;
+        hva += round_size;
+    }
+}
+
 /* get the memory's offset and size in the vmcore */
 static void get_offset_range(hwaddr phys_addr,
                              ram_addr_t mapping_length,
@@ -624,6 +661,15 @@ static void dump_iterate(DumpState *s, Error **errp)
     ERRP_GUARD();
     GuestPhysBlock *block;
     int64_t size;
+    void *page_buf = NULL;
+
+    if (s->encrypted_guest) {
+        page_buf = g_malloc(s->dump_info.page_size);
+        if (!page_buf) {
+            error_setg(errp, "No enough memory.");
+            return;
+        }
+    }
 
     do {
         block = s->next_block;
@@ -635,12 +681,23 @@ static void dump_iterate(DumpState *s, Error **errp)
                 size -= block->target_end - (s->begin + s->length);
             }
         }
-        write_memory(s, block, s->start, size, errp);
+
+        if (!s->encrypted_guest) {
+            write_memory(s, block, s->start, size, errp);
+        } else {
+            write_memory_encrypted_guest(s, block, s->start, size,
+                                         page_buf, s->dump_info.page_size,
+                                         errp);
+        }
+
         if (*errp) {
-            return;
+            break;
         }
 
     } while (!get_next_block(s, block));
+
+    if (page_buf)
+        g_free(page_buf);
 }
 
 static void create_vmcore(DumpState *s, Error **errp)
@@ -1532,6 +1589,10 @@ static void dump_state_prepare(DumpState *s)
 {
     /* zero the struct, setting status to active */
     *s = (DumpState) { .status = DUMP_STATUS_ACTIVE };
+
+    if (tdx_debug_enabled()) {
+        s->encrypted_guest = true;
+    }
 }
 
 bool qemu_system_dump_in_progress(void)
