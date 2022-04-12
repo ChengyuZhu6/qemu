@@ -583,4 +583,5 @@ bool kvm_cpu_check_are_resettable(void);
 bool kvm_arch_cpu_check_are_resettable(void);
 
 bool kvm_dirty_ring_enabled(void);
+int kvm_convert_memory(hwaddr start, hwaddr size, bool shared_to_private);
 #endif
