@@ -370,6 +370,24 @@ static Notifier tdx_machine_done_notify = {
     .notify = tdx_finalize_vm,
 };
 
+static void pr_tdx_capabilities(void)
+{
+	int i;
+	struct kvm_tdx_cpuid_config *cpuid_config;
+
+	printf("tdx_caps->attrs_fixed0: 0x%llx\n", tdx_caps->attrs_fixed0);
+	printf("tdx_caps->attrs_fixed1: 0x%llx\n", tdx_caps->attrs_fixed1);
+	printf("tdx_caps->xfam_fixed0: 0x%llx\n", tdx_caps->xfam_fixed0);
+	printf("tdx_caps->xfam_fixed1: 0x%llx\n", tdx_caps->xfam_fixed1);
+
+	for (i = 0; i < tdx_caps->nr_cpuid_configs; i++) {
+		cpuid_config = &tdx_caps->cpuid_configs[i];
+		printf("cpuid_config[%d]: 0x%x_0x%x eax 0x%x ebx 0x%x ecx 0x%x edx 0x%x\n",
+				i, cpuid_config->leaf, cpuid_config->sub_leaf,
+				cpuid_config->eax, cpuid_config->ebx, cpuid_config->ecx, cpuid_config->edx);
+	}
+}
+
 int tdx_kvm_init(MachineState *ms, Error **errp)
 {
     X86MachineState *x86ms = X86_MACHINE(ms);
@@ -395,6 +413,8 @@ int tdx_kvm_init(MachineState *ms, Error **errp)
     if (!tdx_caps) {
         get_tdx_capabilities();
     }
+
+    pr_tdx_capabilities();
 
     /*
      * Set kvm_readonly_mem_allowed to false, because TDX only supports readonly
