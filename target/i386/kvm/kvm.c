@@ -3493,7 +3493,9 @@ static int kvm_put_msrs(X86CPU *cpu, int level)
         }
 
         if (kvm_enabled() && cpu->enable_pmu &&
-            (env->features[FEAT_7_0_EDX] & CPUID_7_0_EDX_ARCH_LBR)) {
+            (env->features[FEAT_7_0_EDX] & CPUID_7_0_EDX_ARCH_LBR) &&
+            ((env->features[FEAT_PERF_CAPABILITIES] & PERF_CAP_LBR_FMT) ==
+             PERF_CAP_LBR_FMT)) {
             uint64_t depth;
             int i, ret;
 
@@ -3956,7 +3958,9 @@ static int kvm_get_msrs(X86CPU *cpu)
     }
 
     if (kvm_enabled() && cpu->enable_pmu &&
-        (env->features[FEAT_7_0_EDX] & CPUID_7_0_EDX_ARCH_LBR)) {
+        (env->features[FEAT_7_0_EDX] & CPUID_7_0_EDX_ARCH_LBR) &&
+        ((env->features[FEAT_PERF_CAPABILITIES] & PERF_CAP_LBR_FMT) ==
+         PERF_CAP_LBR_FMT)) {
         uint64_t depth;
         int i, ret;
 
