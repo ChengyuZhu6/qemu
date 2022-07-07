@@ -39,6 +39,7 @@
 #include "exec/address-spaces.h"
 #include "hw/boards.h"
 #include "hw/i386/sgx-epc.h"
+#include "kvm/tdx.h"
 #endif
 
 #include "disas/capstone.h"
@@ -5519,6 +5520,13 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
             } else {
                 *ecx &= ~XSTATE_ARCH_LBR_MASK;
             }
+#ifndef CONFIG_USER_ONLY
+#define TDX_TD_XFAM_CET         (XSTATE_CET_U_MASK | XSTATE_CET_S_MASK)
+            if (is_tdx_vm() &&
+                (*ecx & TDX_TD_XFAM_CET)) {
+                *ecx |= TDX_TD_XFAM_CET;
+            }
+#endif
         } else if (count == 0xf &&
                    accel_uses_host_cpuid() && cpu->enable_pmu &&
                    (env->features[FEAT_7_0_EDX] & CPUID_7_0_EDX_ARCH_LBR)) {
