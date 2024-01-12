@@ -113,10 +113,12 @@ bool pc_system_ovmf_table_find(const char *entry, uint8_t **data,
     assert(ovmf_flash_parsed);
 
     if (qemu_uuid_parse(entry, &entry_guid) < 0) {
+        error_report("qemu_uuid_parse failed");
         return false;
     }
 
     if (!ptr) {
+        error_report("ovmf_table null");
         return false;
     }
 
@@ -140,8 +142,10 @@ bool pc_system_ovmf_table_find(const char *entry, uint8_t **data,
          * the zero case
          */
         if (len < sizeof(QemuUUID) + sizeof(uint16_t)) {
+            error_report("len < sizeof(QemuUUID) + sizeof(uint16_t)");
             return false;
         } else if (len > tot_len) {
+            error_report("len > tot_len");
             return false;
         }
 
